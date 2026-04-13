@@ -52,7 +52,15 @@ const LaunchRequestHandler = {
 
 // Vercel Serverless Function Wrapper
 module.exports = async (req, res) => {
-    // Create the Alexa Skill instance
+    // 1. Log the request method and body for debugging
+    console.log(`Received ${req.method} request`);
+    console.log("Body:", JSON.stringify(req.body));
+
+    // 2. Guard against non-POST or empty requests
+    if (req.method !== 'POST' || !req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).send('This endpoint requires a POST request with an Alexa RequestEnvelope.');
+    }
+
     const skill = Alexa.SkillBuilders.custom()
         .addRequestHandlers(
             LaunchRequestHandler,
@@ -61,11 +69,10 @@ module.exports = async (req, res) => {
         .create();
 
     try {
-        // Invoke the skill with the request from Alexa
         const response = await skill.invoke(req.body);
         res.status(200).json(response);
     } catch (error) {
         console.error("Skill Error:", error);
-        res.status(500).send("Error processing request");
+        res.status(500).json({ error: error.message });
     }
 };
