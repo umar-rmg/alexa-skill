@@ -1,0 +1,10 @@
+{
+    "name": "algo-one-vercel",
+    "version": "1.0.0",
+    "main": "api/alexa.js",
+    "dependencies": {
+        "ask-sdk-core": "^2.14.0",
+        "ask-sdk-model": "^1.40.0",
+        "twilio": "^5.0.0"
+    }
+}
