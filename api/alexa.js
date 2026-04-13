@@ -23,10 +23,10 @@ const sendWhatsApp = async (item) => {
 const AddingItemIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
-            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'adding_item_intent';
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'Add_item_intent';
     },
     async handle(handlerInput) {
-        const itemName = Alexa.getSlotValue(handlerInput.requestEnvelope, 'itemName');
+        const itemName = Alexa.getSlotValue(handlerInput.requestEnvelope, 'item');
 
         // Trigger the WhatsApp message
         await sendWhatsApp(itemName);
