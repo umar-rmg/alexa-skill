@@ -49,6 +49,8 @@ const AddItemIntentHandler = {
                 .getResponse();
         }
 
+        console.log(`Items being added (count: ${items.length}):`, items);
+
         // 2. Format for Alexa's voice and WhatsApp
         const itemsString = items.join(', ').replace(/, ([^,]*)$/, ' and $1');
 
