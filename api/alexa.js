@@ -1,78 +1,111 @@
 const Alexa = require('ask-sdk-core');
 const twilio = require('twilio');
 
-// Twilio setup
+// Environment Variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
+const receipentNumber = process.env.RECEIPENT_NUMBER;
 const client = new twilio(accountSid, authToken);
 
-const sendWhatsApp = async (item) => {
+/**
+ * Sends a WhatsApp notification matching the technical specification format.
+ */
+const sendWhatsAppNotification = async (itemsString) => {
     try {
+        // Format from Spec: "{item} has been added to your AlgoOne shopping list..."
+        const messageBody = `${itemsString} has been added to your AlgoOne shopping list. View your full list: algoone.com/list/abc123. Keep adding items any time just say: "Alexa, add [item] to my AlgoOne list"`;
+
         await client.messages.create({
-            from: 'whatsapp:+14155238886', // Twilio Sandbox Number
-            to: 'whatsapp:+923150576007', // Your verified phone number
-            body: `You added "${item}" to your shopping list via Alexa.`
+            from: 'whatsapp:+14155238886', // Your Twilio Sandbox Number
+            to: `whatsapp:${receipentNumber}`,
+            body: messageBody
         });
-        console.log("WhatsApp message sent.");
+        console.log("WhatsApp message sent successfully.");
     } catch (error) {
         console.error("Twilio Error:", error.message);
     }
 };
 
-// Alexa Intent Handler
-const AddingItemIntentHandler = {
+const AddItemIntentHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'Add_item_intent';
     },
     async handle(handlerInput) {
-        const itemName = Alexa.getSlotValue(handlerInput.requestEnvelope, 'item');
+        const itemSlot = handlerInput.requestEnvelope.request.intent.slots.item;
+        let items = [];
 
-        // Trigger the WhatsApp message
-        await sendWhatsApp(itemName);
+        // 1. Handle Multi-Value Slot logic
+        if (itemSlot.slotValue && itemSlot.slotValue.type === 'List') {
+            items = itemSlot.slotValue.values.map(v => v.value);
+        } else if (itemSlot.value) {
+            items = [itemSlot.value];
+        }
+
+        if (items.length === 0) {
+            return handlerInput.responseBuilder
+                .speak("I didn't catch the items. What should I add to the list?")
+                .reprompt("What items would you like to add?")
+                .getResponse();
+        }
+
+        // 2. Format for Alexa's voice and WhatsApp
+        const itemsString = items.join(', ').replace(/, ([^,]*)$/, ' and $1');
+
+        // 3. Trigger Business Logic: Database and WhatsApp [cite: 122, 124]
+        // TODO: await db.insertItems(items);
+        await sendWhatsAppNotification(itemsString);
+
+        const speakOutput = `Got it. I've added ${itemsString} to your Algo One list.`;
 
         return handlerInput.responseBuilder
-            .speak(`Got it. I've added ${itemName} to your list and sent a WhatsApp confirmation.`)
+            .speak(speakOutput)
             .getResponse();
     }
 };
 
-// Generic Launch Request Handler
 const LaunchRequestHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
     },
     handle(handlerInput) {
         return handlerInput.responseBuilder
-            .speak("Welcome to Algo One. What should I add to your list?")
-            .reprompt("I didn't catch that. What would you like to add?")
+            .speak("Welcome to Algo One. What should I add to your shopping list?")
+            .reprompt("You can say 'add milk' or 'add eggs and bread'.")
             .getResponse();
     }
 };
 
-// Vercel Serverless Function Wrapper
-module.exports = async (req, res) => {
-    // 1. Log the request method and body for debugging
-    console.log(`Received ${req.method} request`);
-    console.log("Body:", JSON.stringify(req.body));
+const ErrorHandler = {
+    canHandle() { return true; },
+    handle(handlerInput, error) {
+        console.log(`~~~~ Error handled: ${error.stack}`);
+        return handlerInput.responseBuilder
+            .speak("Sorry, I had trouble doing that. Please try again.")
+            .getResponse();
+    }
+};
 
-    // 2. Guard against non-POST or empty requests
-    if (req.method !== 'POST' || !req.body || Object.keys(req.body).length === 0) {
-        return res.status(400).send('This endpoint requires a POST request with an Alexa RequestEnvelope.');
+// Vercel Serverless Entry Point
+module.exports = async (req, res) => {
+    // Safety check for empty requests
+    if (!req.body || Object.keys(req.body).length === 0) {
+        return res.status(400).send('Request body is empty.');
     }
 
     const skill = Alexa.SkillBuilders.custom()
         .addRequestHandlers(
             LaunchRequestHandler,
-            AddingItemIntentHandler
+            AddItemIntentHandler
         )
+        .addErrorHandlers(ErrorHandler)
         .create();
 
     try {
         const response = await skill.invoke(req.body);
         res.status(200).json(response);
     } catch (error) {
-        console.error("Skill Error:", error);
+        console.error("Skill Execution Error:", error);
         res.status(500).json({ error: error.message });
     }
 };
