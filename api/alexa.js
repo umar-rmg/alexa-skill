@@ -13,7 +13,7 @@ const client = new twilio(accountSid, authToken);
 const sendWhatsAppNotification = async (itemsString) => {
     try {
         // Format from Spec: "{item} has been added to your AlgoOne shopping list..."
-        const messageBody = `${itemsString} has been added to your AlgoOne shopping list. View your full list: algoone.com/list/abc123. Keep adding items any time just say: "Alexa, add [item] to my AlgoOne list"`;
+        const messageBody = `You added ${itemsString} to your shopping list via Alexa.`;
 
         await client.messages.create({
             from: 'whatsapp:+14155238886', // Your Twilio Sandbox Number
