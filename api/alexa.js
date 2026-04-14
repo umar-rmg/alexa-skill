@@ -10,7 +10,7 @@ const sendWhatsApp = async (item) => {
     try {
         await client.messages.create({
             from: 'whatsapp:+14155238886', // Twilio Sandbox Number
-            to: 'whatsapp:+923150576007', // Your verified phone number
+            to: 'whatsapp:+16464369745', // Your verified phone number
             body: `You added "${item}" to your shopping list via Alexa.`
         });
         console.log("WhatsApp message sent.");
