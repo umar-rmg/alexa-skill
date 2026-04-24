@@ -1,5 +1,5 @@
 {
-    "name": "algo-one-vercel",
+    "name": "alexa-skill-webhook",
     "version": "1.0.0",
     "main": "api/alexa.js",
     "dependencies": {
