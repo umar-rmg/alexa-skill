@@ -6,6 +6,7 @@
         "@supabase/supabase-js": "^2.0.0",
         "ask-sdk-core": "^2.14.0",
         "ask-sdk-model": "^1.40.0",
+        "openai": "^6.34.0",
         "twilio": "^5.0.0"
     }
 }

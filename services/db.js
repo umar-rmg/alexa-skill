@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { categorizeItems } = require('./categorize');
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
@@ -47,9 +48,12 @@ const getOrCreateUser = async (phoneNumber) => {
  * @returns {Promise<object[]>} The inserted rows.
  */
 const storeItems = async (itemNames, userId) => {
-    const rows = itemNames.map((name) => ({
+    const categorized = await categorizeItems(itemNames);
+
+    const rows = categorized.map((item) => ({
         user_id: userId,
-        name: name.charAt(0).toUpperCase() + name.slice(1),
+        name: item.name,
+        category: item.category,
         source: 'alexa',
     }));
 
