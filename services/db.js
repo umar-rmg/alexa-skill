@@ -11,10 +11,15 @@ const supabase = createClient(
  * @returns {Promise<object>} User row with at minimum { id }.
  */
 const getOrCreateUser = async (phoneNumber) => {
+    // Normalize to match how Twilio/webhook stores numbers in the DB
+    const normalizedPhone = phoneNumber.startsWith('whatsapp:')
+        ? phoneNumber
+        : `whatsapp:${phoneNumber}`;
+
     const { data: existing, error: lookupError } = await supabase
         .from('app_users')
         .select('id, public_id, display_name')
-        .eq('phone_number', phoneNumber)
+        .eq('phone_number', normalizedPhone)
         .limit(1)
         .single();
 
@@ -27,7 +32,7 @@ const getOrCreateUser = async (phoneNumber) => {
 
     const { data: created, error: insertError } = await supabase
         .from('app_users')
-        .insert({ phone_number: phoneNumber })
+        .insert({ phone_number: normalizedPhone })
         .select('id, public_id, display_name')
         .single();
 
