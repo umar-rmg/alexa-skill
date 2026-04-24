@@ -1,5 +1,6 @@
 const Alexa = require('ask-sdk-core');
 const twilio = require('twilio');
+const { getOrCreateUser, storeItems } = require('../services/db');
 
 // Environment Variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
@@ -7,22 +8,25 @@ const authToken = process.env.TWILIO_AUTH_TOKEN;
 const receipentNumber = process.env.RECEIPENT_NUMBER;
 const client = new twilio(accountSid, authToken);
 
+const LIST_APP_URL = process.env.LIST_APP_URL;
+
 /**
- * Sends a WhatsApp notification matching the technical specification format.
+ * Sends a WhatsApp confirmation matching the algo1-webhook format.
  */
-const sendWhatsAppNotification = async (itemsString) => {
+const sendWhatsAppNotification = async (user, itemNamesString) => {
     try {
-        // Format from Spec: "{item} has been added to your AlgoOne shopping list..."
-        const messageBody = `You added ${itemsString} to your shopping list via Alexa.`;
+        const listUrl = `${LIST_APP_URL}?u=${user.public_id}`;
+        const greeting = user.display_name ? `Hi ${user.display_name}! ` : 'Hi! ';
+        const messageBody = `${greeting}Added ${itemNamesString} to your list! 🛒\n\n${listUrl}`;
 
         await client.messages.create({
-            from: 'whatsapp:+14155238886', // Your Twilio Sandbox Number
+            from: 'whatsapp:+14155238886',
             to: `whatsapp:${receipentNumber}`,
             body: messageBody
         });
-        console.log("WhatsApp message sent successfully.");
+        console.log('WhatsApp message sent successfully.');
     } catch (error) {
-        console.error("Twilio Error:", error.message);
+        console.error('Twilio Error:', error.message);
     }
 };
 
@@ -54,9 +58,10 @@ const AddItemIntentHandler = {
         // 2. Format for Alexa's voice and WhatsApp
         const itemsString = items.join(', ').replace(/, ([^,]*)$/, ' and $1');
 
-        // 3. Trigger Business Logic: Database and WhatsApp [cite: 122, 124]
-        // TODO: await db.insertItems(items);
-        await sendWhatsAppNotification(itemsString);
+        // 3. Trigger Business Logic: Database and WhatsApp
+        const user = await getOrCreateUser(receipentNumber);
+        await storeItems(items, user.id);
+        await sendWhatsAppNotification(user, itemsString);
 
         const speakOutput = `Got it. I've added ${itemsString} to your Algo One list.`;
 
