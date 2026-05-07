@@ -1,12 +1,11 @@
 const Alexa = require('ask-sdk-core');
 const twilio = require('twilio');
-const { getOrCreateUser, storeItems } = require('../services/db');
+const { getUserByAlexaAccessToken, storeItems } = require('../services/db');
 
 // Environment Variables
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
-const receipentNumber = process.env.RECEIPENT_NUMBER;
-const client = new twilio(accountSid, authToken);
+const client = accountSid && authToken ? new twilio(accountSid, authToken) : null;
 
 const LIST_APP_URL = process.env.LIST_APP_URL;
 
@@ -14,14 +13,19 @@ const LIST_APP_URL = process.env.LIST_APP_URL;
  * Sends a WhatsApp confirmation matching the algo1-webhook format.
  */
 const sendWhatsAppNotification = async (user, itemNamesString) => {
+    if (!client || !user.phone_number) return;
+
     try {
         const listUrl = `${LIST_APP_URL}?u=${user.public_id}`;
         const greeting = user.display_name ? `Hi ${user.display_name}! ` : 'Hi! ';
         const messageBody = `${greeting}Added ${itemNamesString} to your list! 🛒\n\n${listUrl}`;
+        const toNumber = user.phone_number.startsWith('whatsapp:')
+            ? user.phone_number
+            : `whatsapp:${user.phone_number}`;
 
         await client.messages.create({
-            from: 'whatsapp:+14155238886',
-            to: `whatsapp:${receipentNumber}`,
+            from: 'whatsapp:+17177449812',
+            to: toNumber,
             body: messageBody
         });
         console.log('WhatsApp message sent successfully.');
@@ -36,6 +40,16 @@ const AddItemIntentHandler = {
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'Add_item_intent';
     },
     async handle(handlerInput) {
+        const accessToken = handlerInput.requestEnvelope.context.System.user.accessToken;
+        const user = await getUserByAlexaAccessToken(accessToken);
+
+        if (!user) {
+            return handlerInput.responseBuilder
+                .speak('To add items to your Algo One list, please open the Alexa app and link your Algo One account.')
+                .withLinkAccountCard()
+                .getResponse();
+        }
+
         const itemSlot = handlerInput.requestEnvelope.request.intent.slots.item;
         let items = [];
 
@@ -59,7 +73,6 @@ const AddItemIntentHandler = {
         const itemsString = items.join(', ').replace(/, ([^,]*)$/, ' and $1');
 
         // 3. Trigger Business Logic: Database and WhatsApp
-        const user = await getOrCreateUser(receipentNumber);
         await storeItems(items, user.id);
         await sendWhatsAppNotification(user, itemsString);
 
@@ -75,9 +88,20 @@ const LaunchRequestHandler = {
     canHandle(handlerInput) {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
     },
-    handle(handlerInput) {
+    async handle(handlerInput) {
+        const accessToken = handlerInput.requestEnvelope.context.System.user.accessToken;
+        const user = await getUserByAlexaAccessToken(accessToken);
+
+        if (!user) {
+            return handlerInput.responseBuilder
+                .speak('Welcome to Algo One. To add items to your list, please open the Alexa app and link your Algo One account.')
+                .withLinkAccountCard()
+                .getResponse();
+        }
+
+        const greeting = user.display_name ? `Welcome back, ${user.display_name}.` : 'Welcome back.';
         return handlerInput.responseBuilder
-            .speak("Welcome to Algo One. What should I add to your shopping list?")
+            .speak(`${greeting} What should I add to your shopping list?`)
             .reprompt("You can say 'add milk' or 'add eggs and bread'.")
             .getResponse();
     }

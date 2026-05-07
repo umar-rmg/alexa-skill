@@ -1,10 +1,42 @@
 const { createClient } = require('@supabase/supabase-js');
+const crypto = require('crypto');
 const { categorizeItems } = require('./categorize');
 
 const supabase = createClient(
     process.env.SUPABASE_URL,
     process.env.SUPABASE_SERVICE_KEY
 );
+
+const hashSecret = (value) => crypto.createHash('sha256').update(value, 'utf8').digest('hex');
+
+/**
+ * Resolves an Alexa OAuth access token to the linked app user.
+ * @param {string | undefined} accessToken - Access token from context.System.user.accessToken.
+ * @returns {Promise<object | null>} User row or null when unlinked/invalid.
+ */
+const getUserByAlexaAccessToken = async (accessToken) => {
+    if (!accessToken) return null;
+
+    const { data: token, error: tokenError } = await supabase
+        .from('alexa_oauth_tokens')
+        .select('user_id, token_type, expires_at, revoked_at')
+        .eq('token_hash', hashSecret(accessToken))
+        .eq('token_type', 'access')
+        .is('revoked_at', null)
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle();
+
+    if (tokenError || !token) return null;
+
+    const { data: user, error: userError } = await supabase
+        .from('app_users')
+        .select('id, public_id, display_name, phone_number')
+        .eq('id', token.user_id)
+        .maybeSingle();
+
+    if (userError || !user) return null;
+    return user;
+};
 
 /**
  * Looks up a user by phone number. Creates the user if not found.
@@ -69,4 +101,4 @@ const storeItems = async (itemNames, userId) => {
     return data;
 };
 
-module.exports = { getOrCreateUser, storeItems };
+module.exports = { getOrCreateUser, getUserByAlexaAccessToken, storeItems };
