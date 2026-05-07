@@ -9,6 +9,21 @@ const client = accountSid && authToken ? new twilio(accountSid, authToken) : nul
 
 const LIST_APP_URL = process.env.LIST_APP_URL;
 
+const getAlexaAccessToken = (handlerInput) => {
+    return handlerInput.requestEnvelope.context?.System?.user?.accessToken
+        || handlerInput.requestEnvelope.session?.user?.accessToken;
+};
+
+const logAlexaLinkState = (handlerInput, accessToken, user) => {
+    const systemUser = handlerInput.requestEnvelope.context?.System?.user;
+    console.log('Alexa account link state:', {
+        hasAccessToken: Boolean(accessToken),
+        resolvedUser: Boolean(user),
+        alexaUserId: systemUser?.userId,
+        requestType: Alexa.getRequestType(handlerInput.requestEnvelope),
+    });
+};
+
 /**
  * Sends a WhatsApp confirmation matching the algo1-webhook format.
  */
@@ -40,8 +55,9 @@ const AddItemIntentHandler = {
             && Alexa.getIntentName(handlerInput.requestEnvelope) === 'Add_item_intent';
     },
     async handle(handlerInput) {
-        const accessToken = handlerInput.requestEnvelope.context.System.user.accessToken;
+        const accessToken = getAlexaAccessToken(handlerInput);
         const user = await getUserByAlexaAccessToken(accessToken);
+        logAlexaLinkState(handlerInput, accessToken, user);
 
         if (!user) {
             return handlerInput.responseBuilder
@@ -89,8 +105,9 @@ const LaunchRequestHandler = {
         return Alexa.getRequestType(handlerInput.requestEnvelope) === 'LaunchRequest';
     },
     async handle(handlerInput) {
-        const accessToken = handlerInput.requestEnvelope.context.System.user.accessToken;
+        const accessToken = getAlexaAccessToken(handlerInput);
         const user = await getUserByAlexaAccessToken(accessToken);
+        logAlexaLinkState(handlerInput, accessToken, user);
 
         if (!user) {
             return handlerInput.responseBuilder

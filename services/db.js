@@ -15,18 +15,31 @@ const hashSecret = (value) => crypto.createHash('sha256').update(value, 'utf8').
  * @returns {Promise<object | null>} User row or null when unlinked/invalid.
  */
 const getUserByAlexaAccessToken = async (accessToken) => {
-    if (!accessToken) return null;
+    if (!accessToken) {
+        console.log('Alexa token lookup skipped: no access token in request.');
+        return null;
+    }
+
+    const tokenHash = hashSecret(accessToken);
 
     const { data: token, error: tokenError } = await supabase
         .from('alexa_oauth_tokens')
         .select('user_id, token_type, expires_at, revoked_at')
-        .eq('token_hash', hashSecret(accessToken))
+        .eq('token_hash', tokenHash)
         .eq('token_type', 'access')
         .is('revoked_at', null)
         .gt('expires_at', new Date().toISOString())
         .maybeSingle();
 
-    if (tokenError || !token) return null;
+    if (tokenError) {
+        console.error('Alexa token lookup failed:', tokenError.message);
+        return null;
+    }
+
+    if (!token) {
+        console.log('Alexa token lookup found no valid token row:', tokenHash.slice(0, 10));
+        return null;
+    }
 
     const { data: user, error: userError } = await supabase
         .from('app_users')
@@ -34,7 +47,16 @@ const getUserByAlexaAccessToken = async (accessToken) => {
         .eq('id', token.user_id)
         .maybeSingle();
 
-    if (userError || !user) return null;
+    if (userError) {
+        console.error('Alexa linked user lookup failed:', userError.message);
+        return null;
+    }
+
+    if (!user) {
+        console.log('Alexa token row has no matching app user:', token.user_id);
+        return null;
+    }
+
     return user;
 };
 
