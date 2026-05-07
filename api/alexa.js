@@ -16,11 +16,17 @@ const getAlexaAccessToken = (handlerInput) => {
 
 const logAlexaLinkState = (handlerInput, accessToken, user) => {
     const systemUser = handlerInput.requestEnvelope.context?.System?.user;
+    const requestType = Alexa.getRequestType(handlerInput.requestEnvelope);
+    const intentName = requestType === 'IntentRequest'
+        ? Alexa.getIntentName(handlerInput.requestEnvelope)
+        : undefined;
     console.log('Alexa account link state:', {
         hasAccessToken: Boolean(accessToken),
         resolvedUser: Boolean(user),
+        applicationId: handlerInput.requestEnvelope.context?.System?.application?.applicationId,
         alexaUserId: systemUser?.userId,
-        requestType: Alexa.getRequestType(handlerInput.requestEnvelope),
+        requestType,
+        intentName,
     });
 };
 
@@ -124,6 +130,66 @@ const LaunchRequestHandler = {
     }
 };
 
+const HelpIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.HelpIntent';
+    },
+    handle(handlerInput) {
+        return handlerInput.responseBuilder
+            .speak("You can say, add bananas, or add milk and eggs.")
+            .reprompt("What would you like to add to your Algo One list?")
+            .getResponse();
+    }
+};
+
+const CancelAndStopIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && ['AMAZON.CancelIntent', 'AMAZON.StopIntent', 'AMAZON.NavigateHomeIntent'].includes(Alexa.getIntentName(handlerInput.requestEnvelope));
+    },
+    handle(handlerInput) {
+        return handlerInput.responseBuilder
+            .speak('Goodbye.')
+            .getResponse();
+    }
+};
+
+const FallbackIntentHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest'
+            && Alexa.getIntentName(handlerInput.requestEnvelope) === 'AMAZON.FallbackIntent';
+    },
+    handle(handlerInput) {
+        return handlerInput.responseBuilder
+            .speak("I didn't catch that. You can say, add bananas.")
+            .reprompt('What should I add to your list?')
+            .getResponse();
+    }
+};
+
+const SessionEndedRequestHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'SessionEndedRequest';
+    },
+    handle(handlerInput) {
+        return handlerInput.responseBuilder.getResponse();
+    }
+};
+
+const IntentReflectorHandler = {
+    canHandle(handlerInput) {
+        return Alexa.getRequestType(handlerInput.requestEnvelope) === 'IntentRequest';
+    },
+    handle(handlerInput) {
+        console.log('Unhandled Alexa intent:', Alexa.getIntentName(handlerInput.requestEnvelope));
+        return handlerInput.responseBuilder
+            .speak("I can add groceries to your Algo One list. Try saying, add bananas.")
+            .reprompt('What should I add?')
+            .getResponse();
+    }
+};
+
 const ErrorHandler = {
     canHandle() { return true; },
     handle(handlerInput, error) {
@@ -144,7 +210,12 @@ module.exports = async (req, res) => {
     const skill = Alexa.SkillBuilders.custom()
         .addRequestHandlers(
             LaunchRequestHandler,
-            AddItemIntentHandler
+            AddItemIntentHandler,
+            HelpIntentHandler,
+            CancelAndStopIntentHandler,
+            FallbackIntentHandler,
+            SessionEndedRequestHandler,
+            IntentReflectorHandler
         )
         .addErrorHandlers(ErrorHandler)
         .create();
