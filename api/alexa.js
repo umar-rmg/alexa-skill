@@ -1,13 +1,12 @@
 const Alexa = require('ask-sdk-core');
-const twilio = require('twilio');
 const { getUserByAlexaAccessToken, storeItems } = require('../services/db');
 
-// Environment Variables
-const accountSid = process.env.TWILIO_ACCOUNT_SID;
-const authToken = process.env.TWILIO_AUTH_TOKEN;
-const client = accountSid && authToken ? new twilio(accountSid, authToken) : null;
-
-const LIST_APP_URL = process.env.LIST_APP_URL;
+const DEFAULT_WEBHOOK_URL = 'https://algo1-webhook.vercel.app';
+const WEBHOOK_BASE_URL = (
+    process.env.ALGO1_WEBHOOK_URL
+    || process.env.VITE_ALGO1_WEBHOOK_URL
+    || DEFAULT_WEBHOOK_URL
+).replace(/\/$/, '');
 
 const getAlexaAccessToken = (handlerInput) => {
     return handlerInput.requestEnvelope.context?.System?.user?.accessToken
@@ -30,28 +29,39 @@ const logAlexaLinkState = (handlerInput, accessToken, user) => {
     });
 };
 
-/**
- * Sends a WhatsApp confirmation matching the algo1-webhook format.
- */
-const sendWhatsAppNotification = async (user, itemNamesString) => {
-    if (!client || !user.phone_number) return;
+const normalizeNotificationItems = (items) => {
+    if (!Array.isArray(items)) return [];
+
+    return items
+        .map((item) => {
+            if (typeof item === 'string') return item;
+            if (item && typeof item.name === 'string') return item.name;
+            return '';
+        })
+        .map((name) => name.trim())
+        .filter(Boolean);
+};
+
+const sendItemsAddedNotification = async (user, items) => {
+    const itemNames = normalizeNotificationItems(items);
+    if (!user?.id || itemNames.length === 0) return;
 
     try {
-        const listUrl = `${LIST_APP_URL}?u=${user.public_id}`;
-        const greeting = user.display_name ? `Hi ${user.display_name}! ` : 'Hi! ';
-        const messageBody = `${greeting}Added ${itemNamesString} to your list! 🛒\n\n${listUrl}`;
-        const toNumber = user.phone_number.startsWith('whatsapp:')
-            ? user.phone_number
-            : `whatsapp:${user.phone_number}`;
-
-        await client.messages.create({
-            from: 'whatsapp:+17177449812',
-            to: toNumber,
-            body: messageBody
+        const response = await fetch(`${WEBHOOK_BASE_URL}/notifications/items-added`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                user_id: user.id,
+                source: 'alexa',
+                items: itemNames,
+            }),
         });
-        console.log('WhatsApp message sent successfully.');
+
+        if (!response.ok) {
+            console.warn('[alexa] items-added notification failed', { status: response.status });
+        }
     } catch (error) {
-        console.error('Twilio Error:', error.message);
+        console.warn('[alexa] items-added notification request failed', error);
     }
 };
 
@@ -95,8 +105,9 @@ const AddItemIntentHandler = {
         const itemsString = items.join(', ').replace(/, ([^,]*)$/, ' and $1');
 
         // 3. Trigger Business Logic: Database and WhatsApp
-        await storeItems(items, user.id);
-        await sendWhatsAppNotification(user, itemsString);
+        const storedItems = await storeItems(items, user.id);
+        const notificationItems = Array.isArray(storedItems) && storedItems.length > 0 ? storedItems : items;
+        await sendItemsAddedNotification(user, notificationItems);
 
         const speakOutput = `Got it. I've added ${itemsString} to your Algo One list.`;
 
